@@ -77,7 +77,6 @@ def http_recv(sock, cli_num, BLOCK_SIZE=8192):
         except socket.error:
             return headers[0], body
     except socket.error:
-        # print('Error while trying to receive from client: ', e)
         return b'', 'timeout'
 
 
@@ -134,10 +133,31 @@ def get_area(x, y):
         return 'NaN'
 
 
+def post_file(file_path, file_cont):
+    try:
+        with open(f'{file_path}', 'xb') as f:
+            data_len = f.write(file_cont)
+
+    except FileExistsError:
+        i = 1
+        file_path = file_path[:file_path.find('.png')] + f'({i}).png'
+        while True:
+            i += 1
+            try:
+                with open(f'{file_path}', 'xb') as f:
+                    data_len = f.write(file_cont)
+                break
+
+            except FileExistsError:
+                file_path = file_path.replace(f'({i - 1})', f'({i})')
+
+    return str(data_len)  # the amount of data transferred to the file
+
+
 def get_params(request):
     """
     :param request:
-    :return: a list of tuples as: [(*name of val*, val), ... ]
+    :return: a list of values as: [val1, val2, ... ]
     """
     ret = request.split('&')
     ret = [i.split('=')[1] for i in ret]
@@ -158,85 +178,153 @@ def handle_request(request_header, body):
     if len(the_whole_request) > 1:
         params = the_whole_request[1]
 
-    ret = ''
+
+    ret = ''  # noqa: E303
     type_ = get_type_header(request)
     if type_ == 'no':
         return 'HTTP/1.1 500 INVALID_REQUEST'
 
     header = 'HTTP/1.1 200 OK\r\n' + type_
 
+
     if code == 'GET':  # noqa: E303
-        # the_whole_request = header[1].split('?')
-        # request = the_whole_request[0]
-        # params = ''
-        # if len(the_whole_request) > 1:
-        #     params = the_whole_request[1]
-        # request = header[1]
-        # request = line1[1].replace('/', '\\')
-        # ret = ''
-        # type_ = get_type_header(request)
-        # if type_ == 'no':
-        #     return 'HTTP/1.1 500 INVALID_REQUEST'
-        if request == '/':
-            ret = get_file_data(f'{WEBROOT_LOCATION}/index.html')
-
-        elif request == '/calculate-next':
-            # num = params[1].split('=')[1]
-            # num = int(num)
-            num = int(get_params(params)[0])
-            ret = get_next(num)
-
-        elif request == '/calculate-area':
-            # temp = get_params(params)
-            # ret = get_area(temp[0], temp[1])
-            height, width = get_params(params)
-            ret = get_area(height, width)
-
-        elif request == '/image':
-            file_name = get_params(params)[0].replace('+', ' ').replace('%20', ' ')
-            file = f'{WEBROOT_LOCATION}/imgs/{file_name}'
-            if os.path.isfile(file):
-                ret = get_file_data(file)
-            else:
-                header = 'HTTP/1.1 404 NOT_FOUND\r\n'
-
-        else:
-            request = WEBROOT_LOCATION + request  # .replace('/', '\\')
-            if not os.path.isfile(request):
-                header = 'HTTP/1.1 404 NOT_FOUND\r\n'
-            else:
-                ret = get_file_data(request)
+        header, ret = if_get(request, params, header)
+        # if request == '/':
+        #     ret = get_file_data(f'{WEBROOT_LOCATION}/index.html')
+        #
+        # elif request == '/calculate-next':
+        #     # num = params[1].split('=')[1]
+        #     # num = int(num)
+        #     num = int(get_params(params)[0])
+        #     ret = get_next(num)
+        #
+        # elif request == '/calculate-area':
+        #     # temp = get_params(params)
+        #     # ret = get_area(temp[0], temp[1])
+        #     height, width = get_params(params)
+        #     ret = get_area(height, width)
+        #
+        # elif request == '/image':
+        #     file_name = get_params(params)[0].replace('+', ' ').replace('%20', ' ')
+        #     file = f'{WEBROOT_LOCATION}/imgs/{file_name}'
+        #     if os.path.isfile(file):
+        #         ret = get_file_data(file)
+        #     else:
+        #         header = 'HTTP/1.1 404 NOT_FOUND\r\n'
+        #
+        # else:
+        #     request = WEBROOT_LOCATION + request  # .replace('/', '\\')
+        #     if not os.path.isfile(request):
+        #         header = 'HTTP/1.1 404 NOT_FOUND\r\n'
+        #     else:
+        #         ret = get_file_data(request)
 
     elif code == 'POST':
-        if request == '/upload':
-            if len(body) == 0:
-                return 'HTTP/1.1 500 NO_IMAGE_TO_SAVE'  # I don't know what would fit this, so just general 500 I guess
-
-            file_name = get_params(params)[0]
-            file_name = file_name.replace('%20', ' ')
-            directory = f'{WEBROOT_LOCATION}/imgs'
-
-            try:
-                with open(f'{directory}/{file_name}', 'xb') as f:
-                    data_len = f.write(body)
-            except FileExistsError:
-                i = 1
-                file_name = file_name[:file_name.find('.png')] + f'({i}).png'
-                while True:
-                    i += 1
-                    try:
-                        with open(f'{directory}/{file_name}', 'xb') as f:
-                            data_len = f.write(body)
-                        break
-                    except FileExistsError:
-                        file_name = file_name.replace(f'({i-1})', f'({i})')
-            ret = str(data_len)
-            print(f'returning: {header}, {ret}')
+        header, ret = if_post(request, params, header, body)
+        # if request == '/upload':
+        #     if len(body) == 0:
+        #         return 'HTTP/1.1 500 NO_IMAGE_TO_SAVE' #I don't know what would fit this so just generally 500 I guess
+        #
+        #     file_name = get_params(params)[0]
+        #     file_name = file_name.replace('%20', ' ')
+        #     directory = f'{WEBROOT_LOCATION}/imgs'
+        #
+        #     try:
+        #         with open(f'{directory}/{file_name}', 'xb') as f:
+        #             data_len = f.write(body)
+        #     except FileExistsError:
+        #         i = 1
+        #         file_name = file_name[:file_name.find('.png')] + f'({i}).png'
+        #         while True:
+        #             i += 1
+        #             try:
+        #                 with open(f'{directory}/{file_name}', 'xb') as f:
+        #                     data_len = f.write(body)
+        #                 break
+        #             except FileExistsError:
+        #                 file_name = file_name.replace(f'({i-1})', f'({i})')
+        #     ret = str(data_len)
+        #     print(f'returning: {header}, {ret}')
 
 
 
     return header, ret  # noqa: E303
     
+
+"""An option to make 'handle_request' more readable"""
+"""
+Pros: makes 'handle_request' shorter
+      the way they they are organized without these is practically the same except as one long function
+"""
+"""
+Cons: not sure how much it would help...
+      if I want to change somthing it will have to fit 
+"""
+
+
+def if_get(request, params, header):
+    ret = ''
+
+    if request == '/':
+        ret = get_file_data(f'{WEBROOT_LOCATION}/index.html')
+
+    elif request == '/calculate-next':
+        num = int(get_params(params)[0])
+        ret = get_next(num)
+
+    elif request == '/calculate-area':
+        height, width = get_params(params)
+        ret = get_area(height, width)
+
+    elif request == '/image':
+        file_name = get_params(params)[0].replace('+', ' ').replace('%20', ' ')
+        file = f'{WEBROOT_LOCATION}/imgs/{file_name}'
+        if os.path.isfile(file):
+            ret = get_file_data(file)
+        else:
+            header = 'HTTP/1.1 404 NOT_FOUND\r\n'
+
+    else:
+        request = WEBROOT_LOCATION + request
+        if not os.path.isfile(request):
+            header = 'HTTP/1.1 404 NOT_FOUND\r\n'
+        else:
+            ret = get_file_data(request)
+
+    return header, ret
+
+
+def if_post(request, params, header, body):
+    ret = ''
+
+    if request == '/upload':
+        if len(body) == 0:
+            return 'HTTP/1.1 500 NO_IMAGE_TO_SAVE'  # I don't know what would fit this so just generally 500 I guess
+
+        file_name = get_params(params)[0]
+        file_name = file_name.replace('%20', ' ')
+        directory = f'{WEBROOT_LOCATION}/imgs'
+
+        # try:
+        #     with open(f'{directory}/{file_name}', 'xb') as f:
+        #         data_len = f.write(body)
+        # except FileExistsError:
+        #     i = 1
+        #     file_name = file_name[:file_name.find('.png')] + f'({i}).png'
+        #     while True:
+        #         i += 1
+        #         try:
+        #             with open(f'{directory}/{file_name}', 'xb') as f:
+        #                 data_len = f.write(body)
+        #             break
+        #         except FileExistsError:
+        #             file_name = file_name.replace(f'({i - 1})', f'({i})')
+        # ret = str(data_len)
+        # # print(f'returning: {header}, {ret}')
+        ret = post_file(f'{directory}/{file_name}', body)
+
+    return header, ret
+
 
 def handle_client(s_clint_sock, tid, addr):
     global exit_all
